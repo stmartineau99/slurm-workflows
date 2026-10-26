@@ -23,9 +23,36 @@ def write_repository_file(
             myfile.write(f"{name}\t{path}\n")
 
 
+def write_repository_diff(
+    repo_name: str,
+    repo_path: str,
+    diff_dir: str,
+) -> None:
+    """Write the uncommitted changes of a repository.
+
+    `git diff HEAD` goes to `<repo_name>.diff`. The untracked files which are not ignored go to
+    `<repo_name>.untracked.txt`, as a list without their content. An empty output is not written.
+
+    Args:
+        repo_name: Name of the repository.
+        repo_path: Path of the repository.
+        diff_dir: Output directory.
+    """
+    commands = {
+        f"{repo_name}.diff": ["git", "diff", "HEAD"],
+        f"{repo_name}.untracked.txt": ["git", "ls-files", "--others", "--exclude-standard"],
+    }
+    for file_name, command in commands.items():
+        output = subprocess.run(command, cwd=repo_path, stdout=subprocess.PIPE).stdout.decode('utf-8')
+        if output:
+            with open(os.path.join(diff_dir, file_name), "w") as myfile:
+                myfile.write(output)
+
+
 def repository_status_to_dict(
     repository_file: str,
     metadict: dict,
+    diff_dir: str = None,
 ) -> None:
     """Add the git hash and the status of each repository to the metadata.
 
@@ -35,6 +62,7 @@ def repository_status_to_dict(
     Args:
         repository_file: Path of the repository file.
         metadict: Metadata of the job.
+        diff_dir: Directory for the uncommitted changes of each dirty repository, or None.
     """
     repo_list = []
 
@@ -60,6 +88,8 @@ def repository_status_to_dict(
                         git_status = "clean"
                     else:
                         git_status = "dirty"
+                        if diff_dir is not None:
+                            write_repository_diff(repo_name, repo_path, diff_dir)
 
                     repo_list.append({"repo_name": repo_name,
                                       "repo_version": repo_version.strip(),

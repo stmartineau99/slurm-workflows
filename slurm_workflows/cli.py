@@ -97,10 +97,13 @@ def write_metadata():
     parser.add_argument("-s", "--settings", type=str, default=None,
                         help="Settings file of the project, which names the HPC user.")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing JSON file.")
+    parser.add_argument("--diff", action="store_true",
+                        help="Write the uncommitted changes of each dirty repository into the input directory.")
     args = parser.parse_args()
 
     try:
-        write_job_metadata(args.input_dir, args.output, args.repository_file, args.overwrite, args.settings)
+        write_job_metadata(args.input_dir, args.output, args.repository_file, args.overwrite, args.settings,
+                           diff=args.diff)
     except (FileNotFoundError, ValueError) as exc:
         sys.exit(str(exc))
 
@@ -121,6 +124,11 @@ def check_dirty():
         repository_status_to_dict(args.repository_file, metadict)
     except ValueError as exc:
         sys.exit(str(exc))
+
+    with open(args.repository_file) as myfile:
+        missing = [path for _, path in (line.split() for line in myfile if line.strip()) if not os.path.isdir(path)]
+    if missing:
+        sys.exit(f"Repository paths do not exist: {', '.join(missing)}.")
 
     dirty = [repo["repo_name"] for repo in metadict["Repositories"] if repo["status"] == "dirty"]
     if dirty:

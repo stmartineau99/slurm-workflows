@@ -133,6 +133,7 @@ def write_job_metadata(
     repository_file: str = None,
     overwrite: bool = False,
     settings_file: str = None,
+    diff: bool = False,
 ):
     """Create or update the `metadata.json` of an archive folder.
 
@@ -142,6 +143,7 @@ def write_job_metadata(
         repository_file: Git repositories to record, or None.
         overwrite: Replace an existing `metadata.json`.
         settings_file: Settings file of the project, which names the HPC user.
+        diff: Write the uncommitted changes of each dirty repository into `input_dir`.
     """
     if output_file is None:
         output_file = os.path.join(input_dir, METADATA_FILE)
@@ -161,6 +163,6 @@ def write_job_metadata(
     reportseff_from_jobid(jobid, metadict)
     # A resubmission can run on a newer commit, so the hash is refreshed for an existing file too.
     if repository_file is not None:
-        repository_status_to_dict(repository_file, metadict=metadict)
+        repository_status_to_dict(repository_file, metadict=metadict, diff_dir=input_dir if diff else None)
 
     write_metadata(metadict, output_file)
