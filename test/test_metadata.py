@@ -41,12 +41,12 @@ class LogFileTest(unittest.TestCase):
         self.assertEqual(jobids_from_log(os.path.join(self.tmp.name, "none.txt")), [])
 
     def test_init_metadict(self):
-        self.assertEqual(init_metadict("/archive/2025-01-01_apply_SGN_M1L/"),
+        self.assertEqual(init_metadict("/archive/2025-01-01_apply_SGN_M1L/1234/"),
                          {"date": "2025-01-01", "task": "apply_SGN_M1L"})
 
     def test_init_metadict_bad_name(self):
         with self.assertRaises(ValueError):
-            init_metadict("/archive/nodate")
+            init_metadict("/archive/nodate/1234")
 
 
 class SbatchParameterTest(unittest.TestCase):
@@ -101,7 +101,7 @@ class ReportseffTest(unittest.TestCase):
             set_reportseff_output(env, REPORT_LINES)
         metadict = {}
         with mock.patch.dict(os.environ, env), contextlib.redirect_stdout(io.StringIO()):
-            reportseff_from_jobid(None, metadict, jobid=jobid)
+            reportseff_from_jobid(jobid, metadict)
         return metadict
 
     def test_jobid_match_is_exact(self):
@@ -122,7 +122,7 @@ class ReportseffTest(unittest.TestCase):
         set_reportseff_output(env, REPORT_LINES)
         metadict = {"Reportseff": [{"JobID": "5"}]}
         with mock.patch.dict(os.environ, env), contextlib.redirect_stdout(io.StringIO()):
-            reportseff_from_jobid(None, metadict, jobid="777")
+            reportseff_from_jobid("777", metadict)
 
         self.assertEqual(metadict["Reportseff"], [{"JobID": "5"}])
 
@@ -131,9 +131,8 @@ class WriteMetadataTest(unittest.TestCase):
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.archived = os.path.join(self.tmp.name, "2025-01-01_x")
+        self.archived = os.path.join(self.tmp.name, "2025-01-01_x", "1234")
         write_file(os.path.join(self.archived, "sbatch.sbatch"), "#!/bin/bash\n#SBATCH -t 01:00:00\n")
-        write_file(os.path.join(self.archived, "log.txt"), "1234\n")
         self.metadata_file = os.path.join(self.archived, "metadata.json")
 
     def tearDown(self):

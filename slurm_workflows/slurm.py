@@ -179,9 +179,8 @@ def matches_jobid(
 
 
 def reportseff_from_jobid(
-    log_file: str,
+    jobid: str,
     metadict: dict,
-    jobid: int = None,
 ) -> None:
     """Add the efficiency report of a job to the metadata.
 
@@ -189,20 +188,9 @@ def reportseff_from_jobid(
     submission. The metadata keeps its old report if `reportseff` does not list the job.
 
     Args:
-        log_file: Log file with one JobID per line. Its last JobID is used if `jobid` is None.
+        jobid: JobID of the job.
         metadict: Metadata of the job.
-        jobid: JobID of the job, or None.
     """
-    if jobid is None:
-        jobids = jobids_from_log(log_file)
-        if len(jobids) == 0:
-            raise FileNotFoundError(f"Provide either a JobID or a log file containing a JobID. "
-                                    f"No JobID was found in {log_file}.")
-        jobid = jobids[-1]
-    else:
-        jobid = str(jobid)
-        print(f"Using manually provided JobID {jobid}")
-
     metadict["jobid"] = jobid
     user_id = subprocess.run(['whoami'], stdout=subprocess.PIPE).stdout.decode('utf-8').strip()
 

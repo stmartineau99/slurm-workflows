@@ -148,10 +148,8 @@ def write_job_metadata(
     else:
         output_file = os.path.abspath(output_file)
 
-    task_dir, jobid = parse_job_dir(input_dir)
-
+    jobid = parse_job_dir(input_dir)[1]
     sbatch_file = os.path.join(input_dir, SBATCH_FILE)
-    log_file = os.path.join(task_dir, LOG_FILE)
 
     if os.path.isfile(output_file) and not overwrite:
         metadict = read_metadata(output_file)
@@ -160,7 +158,7 @@ def write_job_metadata(
 
     user_to_metadict(metadict, settings_file)
     sbatch_parameters_to_dict(sbatch_file, metadict=metadict)
-    reportseff_from_jobid(log_file, metadict=metadict, jobid=jobid)
+    reportseff_from_jobid(jobid, metadict)
     # A resubmission can run on a newer commit, so the hash is refreshed for an existing file too.
     if repository_file is not None:
         repository_status_to_dict(repository_file, metadict=metadict)

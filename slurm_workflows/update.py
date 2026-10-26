@@ -12,9 +12,9 @@ import statistics
 from datetime import date
 from typing import List, Optional
 
-from slurm_workflows.metadata import LOG_FILE, METADATA_FILE, SBATCH_FILE
-from slurm_workflows.metadata import as_list, read_metadata, write_metadata
-from slurm_workflows.slurm import jobids_from_log, matches_jobid, reportseff_from_jobid, sbatch_parameters_to_dict
+from slurm_workflows.metadata import METADATA_FILE, SBATCH_FILE
+from slurm_workflows.metadata import as_list, parse_job_dir, read_metadata, write_metadata
+from slurm_workflows.slurm import matches_jobid, reportseff_from_jobid, sbatch_parameters_to_dict
 from slurm_workflows.slurm import slurm_output_files, slurm_output_to_dict
 
 # The efficiency report of a job is available for around one week after the submission.
@@ -93,11 +93,10 @@ def update_reporteff(subfolders: List[str]):
 
     for folder in update_dir:
         print(f"Updating efficiency report of folder {folder}.")
-        log_file = os.path.join(folder, LOG_FILE)
         metadata = os.path.join(folder, METADATA_FILE)
 
         metadict = read_metadata(metadata)
-        reportseff_from_jobid(log_file, metadict=metadict, jobid=None)
+        reportseff_from_jobid(parse_job_dir(folder)[1], metadict)
 
         write_metadata(metadict, metadata)
 
@@ -106,21 +105,19 @@ def update_reporteff(subfolders: List[str]):
 
 
 def check_metadata(subfolders: List[str]):
-    """Correct the date and the task from the folder name, and the efficiency report from the JobID.
+    """Correct the date and the task from the task folder name, and the efficiency report from the JobID.
 
-    A report of another JobID is deleted if `log.txt` does not list the JobID of the metadata.
+    A report of another JobID is deleted.
 
     Args:
         subfolders: Archive folders.
     """
     update_metadata = []
     for folder in subfolders:
-        folder_name = os.path.basename(folder)
-        contents = folder_name.split("_")
+        contents = os.path.basename(parse_job_dir(folder)[0]).split("_")
         folder_date = contents[0]
         task = "_".join(contents[1:])
 
-        log_file = os.path.join(folder, LOG_FILE)
         metadata = os.path.join(folder, METADATA_FILE)
 
         if os.path.isfile(metadata):
@@ -134,14 +131,11 @@ def check_metadata(subfolders: List[str]):
                 metadict["task"] = task
                 update_metadata.append(folder)
 
-            # check if JobID of efficiency report is identical with JobID of log
             reports = as_list(metadict.get("Reportseff", []))
-            for report in reports:
-                if not matches_jobid(report["JobID"], metadict["jobid"]):
-                    if metadict["jobid"] not in jobids_from_log(log_file):
-                        metadict["Reportseff"] = []
-                    reportseff_from_jobid(log_file, metadict, jobid=metadict["jobid"])
-                    update_metadata.append(folder)
+            if any(not matches_jobid(r["JobID"], metadict["jobid"]) for r in reports):
+                metadict["Reportseff"] = []
+                reportseff_from_jobid(metadict["jobid"], metadict)
+                update_metadata.append(folder)
 
             write_metadata(metadict, metadata)
 
@@ -305,19 +299,18 @@ def update_archive(
     The efficiency report is always refreshed.
 
     Args:
-        input_dir: Directory of the archive folders.
-        pattern: Part of the name of the archive folders to update, or None for all.
+        input_dir: Directory of the task folders `<date>_<suffix>`, which hold one `<jobid>` folder per job.
+        pattern: Part of the name of the task folders to update, or None for all.
         check_general_info: Run `check_metadata()`.
         check_sbatch_info: Run `update_sbatch_data()`.
         slurm_dir: Directory of the slurm output files, or None.
         average: Print the efficiency summary.
     """
-    if pattern is None:
-        subfolders = [f.path for f in os.scandir(input_dir) if f.is_dir()]
-    else:
-        subfolders = sorted(glob.glob(os.path.join(input_dir, f"*{pattern}*"), recursive=False))
-        if len(subfolders) == 0:
-            raise ValueError(f"No subfolders match pattern {pattern}.")
+    task_dirs = glob.glob(os.path.join(input_dir, "*" if pattern is None else f"*{pattern}*"))
+    subfolders = sorted(f.path for task_dir in task_dirs if os.path.isdir(task_dir)
+                        for f in os.scandir(task_dir) if f.is_dir() and f.name.isdigit())
+    if pattern is not None and len(subfolders) == 0:
+        raise ValueError(f"No subfolders match pattern {pattern}.")
 
     if check_sbatch_info:
         update_sbatch_data(subfolders)
