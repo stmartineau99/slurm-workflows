@@ -13,6 +13,7 @@ from slurm_workflows.deploy import RUN_SBATCH_SCRIPT, SCRIPTS_DIR, deploy_jobs, 
 from slurm_workflows.metadata import write_job_metadata
 from slurm_workflows.mobie import add_s3_dataset as add_dataset_to_s3, generate_local_project, generate_s3_project
 from slurm_workflows.pipelines import pipeline_names, project_of_template, resolve_pipeline
+from slurm_workflows.repositories import repository_status_to_dict
 from slurm_workflows.update import update_archive
 
 ARCHIVE_SCRIPT = os.path.join(SCRIPTS_DIR, "02_archive_scripts.sh")
@@ -102,6 +103,28 @@ def write_metadata():
         write_job_metadata(args.input_dir, args.output, args.repository_file, args.overwrite, args.settings)
     except (FileNotFoundError, ValueError) as exc:
         sys.exit(str(exc))
+
+
+def check_dirty():
+    parser = argparse.ArgumentParser(
+        description="Exit with an error if a tracked git repository has uncommitted changes.")
+
+    parser.add_argument('-r', "--repository_file", type=str, required=True,
+                        help="File with information about git repositories in format '<Name>\t<path-to-repository>\n'")
+    args = parser.parse_args()
+
+    if not os.path.isfile(args.repository_file):
+        sys.exit(f"Repository file {args.repository_file} does not exist.")
+
+    metadict = {}
+    try:
+        repository_status_to_dict(args.repository_file, metadict)
+    except ValueError as exc:
+        sys.exit(str(exc))
+
+    dirty = [repo["repo_name"] for repo in metadict["Repositories"] if repo["status"] == "dirty"]
+    if dirty:
+        sys.exit(f"Uncommitted changes in {', '.join(dirty)}.")
 
 
 def update_metadata():

@@ -10,6 +10,7 @@ setup(
         "console_scripts": [
             "slurm_wf.deploy = slurm_workflows.cli:deploy",
             "slurm_wf.write_metadata = slurm_workflows.cli:write_metadata",
+            "slurm_wf.check_dirty = slurm_workflows.cli:check_dirty",
             "slurm_wf.update_metadata = slurm_workflows.cli:update_metadata",
             "slurm_wf.add_s3_dataset = slurm_workflows.cli:add_s3_dataset",
             "slurm_wf.submit = slurm_workflows.cli:submit",
