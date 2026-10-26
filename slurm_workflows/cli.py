@@ -90,7 +90,6 @@ def write_metadata():
 
     parser.add_argument('-o', "--output", type=str, default=None,
                         help="Output file for metadata. Default: <input_dir>/metadata.json")
-    parser.add_argument('-j', "--jobid", type=str, default=None, help="JobID")
     parser.add_argument('-r', "--repository_file",
                         type=str, default=None,
                         help="File with information about git repositories in format '<Name>\t<path-to-repository>\n'")
@@ -100,8 +99,7 @@ def write_metadata():
     args = parser.parse_args()
 
     try:
-        write_job_metadata(args.input_dir, args.output, args.jobid, args.repository_file, args.overwrite,
-                           args.settings)
+        write_job_metadata(args.input_dir, args.output, args.repository_file, args.overwrite, args.settings)
     except (FileNotFoundError, ValueError) as exc:
         sys.exit(str(exc))
 
