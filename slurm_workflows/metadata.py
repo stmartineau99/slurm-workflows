@@ -61,36 +61,18 @@ def as_list(
     return value if isinstance(value, list) else [value]
 
 
-def parse_job_dir(
-    input_dir: str,
-) -> tuple:
-    """Split an archive folder `<date>_<suffix>/<jobid>` into its task folder and its JobID.
-
-    Args:
-        input_dir: Archive folder of one job.
-
-    Returns:
-        tuple: The task folder `<date>_<suffix>` and the JobID.
-    """
-    input_dir = os.path.abspath(input_dir)
-    jobid = os.path.basename(input_dir)
-    if not jobid.isdigit():
-        raise ValueError(f"Check correct format of input directory {input_dir}: 'yyyy-mm-dd_suffix/<jobid>'.")
-    return os.path.dirname(input_dir), jobid
-
-
 def init_metadict(
     input_dir: str,
 ) -> dict:
     """Create the metadata of a job from the name of its archive folder.
 
     Args:
-        input_dir: Archive folder `<date>_<suffix>/<jobid>` with the date as YYYY-MM-DD.
+        input_dir: Archive folder, named `<date>_<suffix>` with the date as YYYY-MM-DD.
 
     Returns:
         dict: The keys 'date' and 'task'. 'task' holds the suffix.
     """
-    folder_name = os.path.basename(parse_job_dir(input_dir)[0])
+    folder_name = os.path.basename(os.path.abspath(input_dir))
     contents = folder_name.split("_")
 
     if len(contents) < 2:
@@ -130,6 +112,7 @@ def user_to_metadict(
 def write_job_metadata(
     input_dir: str,
     output_file: str = None,
+    jobid: int = None,
     repository_file: str = None,
     overwrite: bool = False,
     settings_file: str = None,
@@ -138,8 +121,9 @@ def write_job_metadata(
     """Create or update the `metadata.json` of an archive folder.
 
     Args:
-        input_dir: Archive folder `<date>_<suffix>/<jobid>` of one job.
+        input_dir: Archive folder.
         output_file: Metadata file. Default: `<input_dir>/metadata.json`.
+        jobid: JobID, or None for the last JobID of `log.txt`.
         repository_file: Git repositories to record, or None.
         overwrite: Replace an existing `metadata.json`.
         settings_file: Settings file of the project, which names the HPC user.
@@ -150,8 +134,8 @@ def write_job_metadata(
     else:
         output_file = os.path.abspath(output_file)
 
-    jobid = parse_job_dir(input_dir)[1]
     sbatch_file = os.path.join(input_dir, SBATCH_FILE)
+    log_file = os.path.join(input_dir, LOG_FILE)
 
     if os.path.isfile(output_file) and not overwrite:
         metadict = read_metadata(output_file)
@@ -160,7 +144,7 @@ def write_job_metadata(
 
     user_to_metadict(metadict, settings_file)
     sbatch_parameters_to_dict(sbatch_file, metadict=metadict)
-    reportseff_from_jobid(jobid, metadict)
+    reportseff_from_jobid(log_file, metadict=metadict, jobid=jobid)
     # A resubmission can run on a newer commit, so the hash is refreshed for an existing file too.
     if repository_file is not None:
         repository_status_to_dict(repository_file, metadict=metadict, diff_dir=input_dir if diff else None)
