@@ -17,6 +17,7 @@ The sbatch script should follow the format YYYY-MM-DD_sbatch_<suffix>.sbatch.
 -r repos	File listing the git repositories to snapshot
 -s settings	Settings file which names the HPC user in the metadata
 -d jobid	Start the job only after this JobID completed successfully
+-H hold	    Hold the job until its files are archived, cancel if archiving fails
 -h help
 
 The JobID of the submitted job is printed as 'SUBMITTED_JOBID=<jobid>'.
@@ -28,9 +29,9 @@ SETTINGS_OPTION=()
 MOVE_OPTION=()
 SBATCH_OPTS=()
 
-usage="Usage: $0 [-h] [-m move] [-a archive_dir] [-r repository_file] [-s settings_file] [-d jobid] <sbatch_file>"
+usage="Usage: $0 [-h] [-m move] [-a archive_dir] [-r repository_file] [-s settings_file] [-d jobid] [-H hold] <sbatch_file>"
 
-while getopts "ma:r:s:d:h" opt; do
+while getopts "ma:r:s:d:Hh" opt; do
 	case $opt in
 	m)
 		MOVE_OPTION+=(-m)
@@ -48,6 +49,10 @@ while getopts "ma:r:s:d:h" opt; do
 	d)
 		# Only run after the dependency succeeded, and give up instead of waiting forever.
 		SBATCH_OPTS+=(--dependency=afterok:"$OPTARG" --kill-on-invalid-dep=yes)
+	;;
+	H)
+		HOLD="TRUE"
+		SBATCH_OPTS+=(--hold)
 	;;
 	h)
 		echo "$usage"
@@ -116,3 +121,12 @@ if [ "$ARCHIVE_DIR" ] ; then
 	bash "$SCRIPT_DIR"/02_archive_scripts.sh "${MOVE_OPTION[@]}" -a "$ARCHIVE_DIR" -i "$INPUT_DIR" "$DATE" "$SUFFIX_STR"
 	python "$SCRIPT_DIR"/write_metadata.py "${REPO_OPTION[@]}" "${SETTINGS_OPTION[@]}" "$ARCHIVE_DIR"/"$DATE"_"$SUFFIX_STR"/
 fi
+
+# The exit code of the metadata step tells the caller whether the archive is complete.
+ARCHIVE_STATUS=$?
+
+if [ "$HOLD" ] ; then
+	scontrol release "$JOB_ID"
+fi
+
+exit $ARCHIVE_STATUS

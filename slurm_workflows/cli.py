@@ -9,11 +9,12 @@ import argparse
 import os
 import sys
 
-from slurm_workflows.deploy import RUN_SBATCH_SCRIPT, SCRIPTS_DIR, deploy_jobs, project_module
+from slurm_workflows.deploy import RUN_SBATCH_SCRIPT, SCRIPTS_DIR, deploy_jobs, project_module, repository_file_of
 from slurm_workflows.metadata import write_job_metadata
 from slurm_workflows.mobie import add_s3_dataset as add_dataset_to_s3, generate_local_project, generate_s3_project
 from slurm_workflows.pipelines import pipeline_names, project_of_template, resolve_pipeline
 from slurm_workflows.repositories import repository_status_to_dict
+from slurm_workflows.settings import load_settings
 from slurm_workflows.update import update_archive
 
 ARCHIVE_SCRIPT = os.path.join(SCRIPTS_DIR, "02_archive_scripts.sh")
@@ -94,46 +95,67 @@ def write_metadata():
     parser.add_argument('-j', "--jobid", type=str, default=None, help="JobID")
     parser.add_argument('-r', "--repository_file",
                         type=str, default=None,
-                        help="File with information about git repositories in format '<Name>\t<path-to-repository>\n'")
+                        help="File with information about git repositories in format '<Name>\t<path-to-repository>\n'. "
+                             "Default: derived from the repositories of the settings file.")
     parser.add_argument("-s", "--settings", type=str, default=None,
-                        help="Settings file of the project, which names the HPC user.")
+                        help="Settings file of the project, which names the HPC user and the repositories.")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing JSON file.")
     parser.add_argument("--diff", action="store_true",
                         help="Write the uncommitted changes of each dirty repository into the input directory.")
     args = parser.parse_args()
 
+    repository_file, temporary_repository_file = args.repository_file, None
     try:
-        write_job_metadata(args.input_dir, args.output, args.jobid, args.repository_file, args.overwrite,
+        if repository_file is None and args.settings is not None:
+            repository_file, temporary_repository_file = repository_file_of(load_settings(args.settings), None)
+        write_job_metadata(args.input_dir, args.output, args.jobid, repository_file, args.overwrite,
                            args.settings, diff=args.diff)
     except (FileNotFoundError, ValueError) as exc:
         sys.exit(str(exc))
+    finally:
+        if temporary_repository_file is not None:
+            os.remove(temporary_repository_file)
 
 
 def check_dirty():
     parser = argparse.ArgumentParser(
         description="Exit with an error if a tracked git repository has uncommitted changes.")
 
-    parser.add_argument('-r', "--repository_file", type=str, required=True,
-                        help="File with information about git repositories in format '<Name>\t<path-to-repository>\n'")
+    parser.add_argument('-r', "--repository_file", type=str, default=None,
+                        help="File with information about git repositories in format '<Name>\t<path-to-repository>\n'. "
+                             "Default: derived from the repositories of the settings file.")
+    parser.add_argument("-s", "--settings", type=str, default=None,
+                        help="Settings file of the project, which lists the repositories.")
     args = parser.parse_args()
 
-    if not os.path.isfile(args.repository_file):
-        sys.exit(f"Repository file {args.repository_file} does not exist.")
+    if args.repository_file is None and args.settings is None:
+        parser.error("-r or -s is needed.")
 
-    metadict = {}
+    repository_file, temporary_repository_file = args.repository_file, None
     try:
-        repository_status_to_dict(args.repository_file, metadict)
-    except ValueError as exc:
+        if repository_file is None:
+            repository_file, temporary_repository_file = repository_file_of(load_settings(args.settings), None)
+
+        if not os.path.isfile(repository_file):
+            sys.exit(f"Repository file {repository_file} does not exist.")
+
+        metadict = {}
+        repository_status_to_dict(repository_file, metadict)
+
+        with open(repository_file) as myfile:
+            missing = [path for _, path in (line.split() for line in myfile if line.strip())
+                       if not os.path.isdir(path)]
+        if missing:
+            sys.exit(f"Repository paths do not exist: {', '.join(missing)}.")
+
+        dirty = [repo["repo_name"] for repo in metadict["Repositories"] if repo["status"] == "dirty"]
+        if dirty:
+            sys.exit(f"Uncommitted changes in {', '.join(dirty)}.")
+    except (FileNotFoundError, ValueError) as exc:
         sys.exit(str(exc))
-
-    with open(args.repository_file) as myfile:
-        missing = [path for _, path in (line.split() for line in myfile if line.strip()) if not os.path.isdir(path)]
-    if missing:
-        sys.exit(f"Repository paths do not exist: {', '.join(missing)}.")
-
-    dirty = [repo["repo_name"] for repo in metadict["Repositories"] if repo["status"] == "dirty"]
-    if dirty:
-        sys.exit(f"Uncommitted changes in {', '.join(dirty)}.")
+    finally:
+        if temporary_repository_file is not None:
+            os.remove(temporary_repository_file)
 
 
 def update_metadata():
