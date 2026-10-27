@@ -102,6 +102,10 @@ def write_metadata():
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing JSON file.")
     parser.add_argument("--diff", action="store_true",
                         help="Write the uncommitted changes of each dirty repository into the input directory.")
+    parser.add_argument("--env", type=str, default=None,
+                        help="Micromamba environment to record as a lock file of its packages.")
+    parser.add_argument("--env_dir", type=str, default=None,
+                        help="Directory of the environment files, shared by the jobs. Default: <input_dir>")
     args = parser.parse_args()
 
     repository_file, temporary_repository_file = args.repository_file, None
@@ -109,7 +113,7 @@ def write_metadata():
         if repository_file is None and args.settings is not None:
             repository_file, temporary_repository_file = repository_file_of(load_settings(args.settings), None)
         write_job_metadata(args.input_dir, args.output, args.jobid, repository_file, args.overwrite,
-                           args.settings, diff=args.diff)
+                           args.settings, diff=args.diff, env_name=args.env, env_dir=args.env_dir)
     except (FileNotFoundError, ValueError) as exc:
         sys.exit(str(exc))
     finally:

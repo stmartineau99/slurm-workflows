@@ -7,6 +7,7 @@ Access to the files of an archive folder, and creation of its `metadata.json`.
 import json
 import os
 
+from slurm_workflows.environment import environment_to_dict
 from slurm_workflows.repositories import repository_status_to_dict
 from slurm_workflows.settings import USER_SETTINGS, load_settings
 from slurm_workflows.slurm import reportseff_from_jobid, sbatch_parameters_to_dict
@@ -117,6 +118,8 @@ def write_job_metadata(
     overwrite: bool = False,
     settings_file: str = None,
     diff: bool = False,
+    env_name: str = None,
+    env_dir: str = None,
 ):
     """Create or update the `metadata.json` of an archive folder.
 
@@ -128,6 +131,8 @@ def write_job_metadata(
         overwrite: Replace an existing `metadata.json`.
         settings_file: Settings file of the project, which names the HPC user.
         diff: Write the uncommitted changes of each dirty repository into `input_dir`.
+        env_name: Micromamba environment to record, or None.
+        env_dir: Directory of the environment files. Default: `input_dir`.
     """
     if output_file is None:
         output_file = os.path.join(input_dir, METADATA_FILE)
@@ -148,5 +153,7 @@ def write_job_metadata(
     # A resubmission can run on a newer commit, so the hash is refreshed for an existing file too.
     if repository_file is not None:
         repository_status_to_dict(repository_file, metadict=metadict, diff_dir=input_dir if diff else None)
+    if env_name is not None:
+        environment_to_dict(env_name, input_dir if env_dir is None else env_dir, metadict)
 
     write_metadata(metadict, output_file)
