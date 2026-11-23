@@ -10,9 +10,6 @@ from pathlib import Path
 from slurm_workflows.deploy import submit_chain
 from slurm_workflows.repositories import check_dirty, job_repositories
 
-REPO_DIR = Path(__file__).resolve().parents[1]
-PROFILE_DIR = Path(__file__).resolve().parent / "profiles"
-SETTINGS_FILE = Path(__file__).resolve().parent / "synapse-net-scripts.json"
 MAIL_TYPE = "BEGIN,END,FAIL"
 
 OPTIONAL_SBATCH = {
@@ -28,6 +25,7 @@ def parse_args():
         description="Submit the jobs from the [jobs] table of a run config. Unknown arguments go to the job script."
     )
     parser.add_argument("config", type=str, help="Path to TOML config file.")
+    parser.add_argument("-s", "--settings", type=str, required=True, help="Settings file of the project.")
     parser.add_argument("--job", type=str, default=None, help="Submit only this job. By default, submit all jobs.")
     parser.add_argument("--slurm_profile", type=str, default=None, help="Override slurm profile in config.")
     parser.add_argument("--allow_dirty", action="store_true", default=False,
@@ -37,10 +35,10 @@ def parse_args():
     return parser.parse_known_args()
 
 
-def load_profile(name):
-    path = PROFILE_DIR / f"{name}.toml"
+def load_profile(name, profile_dir):
+    path = profile_dir / f"{name}.toml"
     if not path.exists():
-        valid = ", ".join(sorted(p.stem for p in PROFILE_DIR.glob("*.toml")))
+        valid = ", ".join(sorted(p.stem for p in profile_dir.glob("*.toml")))
         raise FileNotFoundError(f"Profile not found: {name}. Select from list: {valid}")
     with open(path, "rb") as f:
         return tomllib.load(f)
@@ -66,17 +64,20 @@ def load_jobs(config_path, job=None):
     return selected
 
 
-def load_settings():
-    with open(SETTINGS_FILE) as f:
+def load_settings(settings_file):
+    with open(settings_file) as f:
         settings = json.load(f)
-    if not settings.get("archive_dir"):
-        raise KeyError(f"No archive_dir set in {SETTINGS_FILE}.")
+    for key in ("archive_dir", "profile_dir"):
+        if not settings.get(key):
+            raise KeyError(f"No {key} set in {settings_file}.")
+    if settings_file.stem not in settings.get("repositories", {}):
+        raise KeyError(f"No repository '{settings_file.stem}' in {settings_file}.")
     return settings
 
 
-def build_script(config_path, job, spec, profile, task_dir, user_address, extra_args=()):
+def build_script(config_path, job, spec, profile, task_dir, repo_dir, settings_file, user_address, extra_args=()):
     slurm = {**profile, **spec.get("slurm", {})}
-    script = REPO_DIR / spec["script"]
+    script = repo_dir / spec["script"]
     if not script.exists():
         raise FileNotFoundError(f"Missing script: {script}")
 
@@ -96,7 +97,7 @@ def build_script(config_path, job, spec, profile, task_dir, user_address, extra_
         "",
         "source ~/.bashrc",
         f"micromamba activate {spec['env']}",
-        f"slurm_wf.write_metadata -j \"$SLURM_JOB_ID\" -s \"{SETTINGS_FILE}\" \"{task_dir}\"",
+        f"slurm_wf.write_metadata -j \"$SLURM_JOB_ID\" -s \"{settings_file}\" \"{task_dir}\"",
         "",
         f"cd {script.parent}",
         "",
@@ -118,7 +119,11 @@ def main():
     jobs = load_jobs(config_path, args.job)
     if extra_args and len(jobs) > 1:
         raise ValueError(f"Extra arguments {extra_args} need a specific job. Select one with --job.")
-    settings = load_settings()
+    settings_file = Path(args.settings).resolve()
+    settings = load_settings(settings_file)
+    project = settings_file.stem
+    repo_dir = Path(settings["repositories"][project])
+    profile_dir = repo_dir / settings["profile_dir"]
     repositories = job_repositories(settings)
     dirty = check_dirty(repositories, settings.get("untracked_files_dirty", False))
     dirty_message = None
@@ -133,10 +138,10 @@ def main():
     with tempfile.TemporaryDirectory() as file_dir:
         sbatch_files = []
         for job, spec in jobs:
-            profile = load_profile(args.slurm_profile or spec["slurm_profile"])
+            profile = load_profile(args.slurm_profile or spec["slurm_profile"], profile_dir)
             task_dir = run_dir / f"{date}_{job}"
-            script_text = build_script(config_path, job, spec, profile, task_dir, settings.get("user_address"),
-                                       extra_args)
+            script_text = build_script(config_path, job, spec, profile, task_dir, repo_dir, settings_file,
+                                       settings.get("user_address"), extra_args)
 
             if args.dry_run:
                 print(f"Submit {get_job_files(task_dir, '<tmp>')[0].name} into {task_dir}, dependency: {dependency}.")
@@ -151,7 +156,7 @@ def main():
 
         if sbatch_files:
             run_dir.mkdir(parents=True, exist_ok=True)
-            submit_chain(sbatch_files, str(run_dir), repositories, str(SETTINGS_FILE), project=SETTINGS_FILE.stem)
+            submit_chain(sbatch_files, str(run_dir), repositories, str(settings_file), project=project)
 
     if dirty_message is not None:
         print(f"Warning: {dirty_message}")
