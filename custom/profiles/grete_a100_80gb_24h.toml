@@ -1,0 +1,6 @@
+partition = "grete:shared"
+gpu = "A100"
+constraint = "80gb_vram"
+time = "24:00:00"
+cpus = 18
+mem = "40G"

@@ -1,0 +1,5 @@
+partition = "grete:preemptible"
+gpu = "2g.20gb:1"
+time = "00:30:00"
+cpus = 8
+mem = "20G"

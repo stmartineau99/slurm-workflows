@@ -10,6 +10,7 @@ from pathlib import Path
 from slurm_workflows.deploy import submit_chain
 from slurm_workflows.repositories import check_dirty, job_repositories
 
+PROFILE_DIR = Path(__file__).resolve().parent / "profiles"
 MAIL_TYPE = "BEGIN,END,FAIL"
 
 OPTIONAL_SBATCH = {
@@ -35,10 +36,10 @@ def parse_args():
     return parser.parse_known_args()
 
 
-def load_profile(name, profile_dir):
-    path = profile_dir / f"{name}.toml"
+def load_profile(name):
+    path = PROFILE_DIR / f"{name}.toml"
     if not path.exists():
-        valid = ", ".join(sorted(p.stem for p in profile_dir.glob("*.toml")))
+        valid = ", ".join(sorted(p.stem for p in PROFILE_DIR.glob("*.toml")))
         raise FileNotFoundError(f"Profile not found: {name}. Select from list: {valid}")
     with open(path, "rb") as f:
         return tomllib.load(f)
@@ -67,9 +68,8 @@ def load_jobs(config_path, job=None):
 def load_settings(settings_file):
     with open(settings_file) as f:
         settings = json.load(f)
-    for key in ("archive_dir", "profile_dir"):
-        if not settings.get(key):
-            raise KeyError(f"No {key} set in {settings_file}.")
+    if not settings.get("archive_dir"):
+        raise KeyError(f"No archive_dir set in {settings_file}.")
     if settings_file.stem not in settings.get("repositories", {}):
         raise KeyError(f"No repository '{settings_file.stem}' in {settings_file}.")
     return settings
@@ -123,7 +123,6 @@ def main():
     settings = load_settings(settings_file)
     project = settings_file.stem
     repo_dir = Path(settings["repositories"][project])
-    profile_dir = repo_dir / settings["profile_dir"]
     repositories = job_repositories(settings)
     dirty = check_dirty(repositories, settings.get("untracked_files_dirty", False))
     dirty_message = None
@@ -138,7 +137,7 @@ def main():
     with tempfile.TemporaryDirectory() as file_dir:
         sbatch_files = []
         for job, spec in jobs:
-            profile = load_profile(args.slurm_profile or spec["slurm_profile"], profile_dir)
+            profile = load_profile(args.slurm_profile or spec["slurm_profile"])
             task_dir = run_dir / f"{date}_{job}"
             script_text = build_script(config_path, job, spec, profile, task_dir, repo_dir, settings_file,
                                        settings.get("user_address"), extra_args)
