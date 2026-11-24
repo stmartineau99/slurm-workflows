@@ -1,0 +1,13 @@
+{
+    "user_address": "stmartineau99@gmail.com",
+    "academic_id": "",
+    "hpc_user": "u25914",
+
+    "archive_dir": "/mnt/vast-nhr/projects/nim00020/sage/slurm-archive/synapse-net-scripts",
+
+    "repositories": {
+        "synapse-net-scripts": "/projects/extern/nhr/nhr_ni/nim00020/dir.project/sage/synapse-net-scripts",
+        "synapse-net": "/projects/extern/nhr/nhr_ni/nim00020/dir.project/sage/source/synapse-net",
+        "torch-em": "/projects/extern/nhr/nhr_ni/nim00020/dir.project/sage/source/torch-em"
+    }
+}

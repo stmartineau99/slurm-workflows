@@ -12,6 +12,7 @@ from slurm_workflows.deploy import submit_chain
 from slurm_workflows.repositories import check_dirty, job_repositories
 
 PROFILE_DIR = Path(__file__).resolve().parent / "profiles"
+SETTINGS_DIR = Path(__file__).resolve().parent / "settings"
 MAIL_TYPE = "BEGIN,END,FAIL"
 
 OPTIONAL_SBATCH = {
@@ -27,7 +28,7 @@ def parse_args():
         description="Submit the jobs from the [jobs] table of a run config. Unknown arguments go to the job script."
     )
     parser.add_argument("config", type=str, help="Path to TOML config file.")
-    parser.add_argument("-s", "--settings", type=str, required=True, help="Settings file of the project.")
+    parser.add_argument("-p", "--project", type=str, required=True, help="Project name.")
     parser.add_argument("--job", type=str, default=None, help="Submit only this job. By default, submit all jobs.")
     parser.add_argument("--slurm_profile", type=str, default=None, help="Override slurm profile in config.")
     parser.add_argument("--allow_dirty", action="store_true", default=False,
@@ -66,14 +67,18 @@ def load_jobs(config_path, job=None):
     return selected
 
 
-def load_settings(settings_file):
+def load_settings(project):
+    settings_file = SETTINGS_DIR / f"{project}.json"
+    if not settings_file.exists():
+        valid = ", ".join(sorted(p.stem for p in SETTINGS_DIR.glob("*.json")))
+        raise FileNotFoundError(f"Settings not found: {project}. Select from list: {valid}")
     with open(settings_file) as f:
         settings = json.load(f)
     if not settings.get("archive_dir"):
         raise KeyError(f"No archive_dir set in {settings_file}.")
-    if settings_file.stem not in settings.get("repositories", {}):
-        raise KeyError(f"No repository '{settings_file.stem}' in {settings_file}.")
-    return settings
+    if project not in settings.get("repositories", {}):
+        raise KeyError(f"No repository '{project}' in {settings_file}.")
+    return settings_file, settings
 
 
 def build_script(config_path, job, spec, profile, task_dir, repo_dir, settings_file, user_address, extra_args=()):
@@ -120,9 +125,8 @@ def main():
     jobs = load_jobs(config_path, args.job)
     if extra_args and len(jobs) > 1:
         raise ValueError(f"Extra arguments {extra_args} need a specific job. Select one with --job.")
-    settings_file = Path(args.settings).resolve()
-    settings = load_settings(settings_file)
-    project = settings_file.stem
+    project = args.project
+    settings_file, settings = load_settings(project)
     repo_dir = Path(settings["repositories"][project])
     repositories = job_repositories(settings)
     dirty = check_dirty(repositories, settings.get("untracked_files_dirty", False))
